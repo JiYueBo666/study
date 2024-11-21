@@ -19,43 +19,65 @@ const props = defineProps({
 	},
 });
 
-// 创建自定义渲染器
-const renderer = {
-	text(text) {
-		if (!text) return "";
+// 处理数学公式
+function processMath(text) {
+	if (typeof text !== "string") {
+		console.warn("非字符串输入:", text);
+		return String(text || "");
+	}
 
-		try {
-			// 处理行内数学公式
-			text = text.replace(/\$([^\$]+)\$/g, (_, formula) => {
+	// 处理块级数学公式
+	text = text
+		.split("$$")
+		.map((part, index) => {
+			if (index % 2 === 1) {
 				try {
-					return katex.renderToString(formula, { throwOnError: false });
-				} catch (e) {
-					console.error("行内公式渲染失败:", e);
-					return formula;
-				}
-			});
-
-			// 处理块级数学公式
-			text = text.replace(/\$\$([^\$]+)\$\$/g, (_, formula) => {
-				try {
-					return katex.renderToString(formula, {
+					return katex.renderToString(part, {
 						displayMode: true,
 						throwOnError: false,
 					});
 				} catch (e) {
 					console.error("块级公式渲染失败:", e);
-					return formula;
+					return part;
 				}
-			});
+			}
+			return part;
+		})
+		.join("");
 
-			return text;
+	// 处理行内数学公式
+	text = text
+		.split("$")
+		.map((part, index) => {
+			if (index % 2 === 1) {
+				try {
+					return katex.renderToString(part, {
+						displayMode: false,
+						throwOnError: false,
+					});
+				} catch (e) {
+					console.error("行内公式渲染失败:", e);
+					return part;
+				}
+			}
+			return part;
+		})
+		.join("");
+
+	return text;
+}
+
+// 配置 marked
+const renderer = {
+	text(text) {
+		try {
+			return processMath(text);
 		} catch (e) {
 			console.error("文本处理失败:", e);
-			return text || "";
+			return String(text || "");
 		}
 	},
 
-	// 添加其他渲染方法
 	code(code, language) {
 		try {
 			if (language && hljs.getLanguage(language)) {
@@ -67,9 +89,17 @@ const renderer = {
 			return code;
 		}
 	},
+
+	// 添加其他必要的渲染方法
+	paragraph(text) {
+		return "<p>" + text + "</p>";
+	},
+
+	heading(text, level) {
+		return `<h${level}>${text}</h${level}>`;
+	},
 };
 
-// 配置 marked
 marked.use({
 	renderer,
 	breaks: true,
@@ -87,9 +117,10 @@ watchEffect(() => {
 			return;
 		}
 
-		console.log("渲染内容:", props.content);
-		renderedContent.value = marked(props.content);
-		console.log("渲染结果:", renderedContent.value);
+		console.log("开始渲染内容:", props.content);
+		const processed = processMath(props.content);
+		renderedContent.value = marked(processed);
+		console.log("渲染完成");
 	} catch (e) {
 		console.error("Markdown渲染失败:", e);
 		renderedContent.value = props.content || "";
@@ -121,5 +152,27 @@ watchEffect(() => {
 	margin: 1em 0;
 	overflow-x: auto;
 	overflow-y: hidden;
+}
+
+.markdown-body blockquote {
+	padding: 0 1em;
+	color: #6a737d;
+	border-left: 0.25em solid #dfe2e5;
+}
+
+.markdown-body table {
+	border-spacing: 0;
+	border-collapse: collapse;
+	margin: 1em 0;
+}
+
+.markdown-body table th,
+.markdown-body table td {
+	padding: 6px 13px;
+	border: 1px solid #dfe2e5;
+}
+
+.markdown-body table tr:nth-child(2n) {
+	background-color: #f6f8fa;
 }
 </style>
